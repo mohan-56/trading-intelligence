@@ -1,0 +1,60 @@
+# Crypto-only universe. Two providers: Binance (primary) + Yahoo (context).
+# `providers` maps our canonical ticker to each provider's spelling.
+#   binance          -> spot OHLCV
+#   binance_futures  -> USD-M perpetual: funding rate, open interest
+#   yahoo            -> macro context only (DXY, VIX, US10Y)
+
+version: 1
+
+symbols:
+  # ---------------- Crypto: spot + perpetual ----------------
+  - ticker: BTCUSD
+    name: Bitcoin
+    asset_class: CRYPTO
+    exchange: BINANCE
+    currency: USD
+    providers: { binance: "BTCUSDT", binance_futures: "BTCUSDT" }
+  - ticker: ETHUSD
+    name: Ethereum
+    asset_class: CRYPTO
+    exchange: BINANCE
+    currency: USD
+    providers: { binance: "ETHUSDT", binance_futures: "ETHUSDT" }
+  - ticker: SOLUSD
+    name: Solana
+    asset_class: CRYPTO
+    exchange: BINANCE
+    currency: USD
+    providers: { binance: "SOLUSDT", binance_futures: "SOLUSDT" }
+  - ticker: BNBUSD
+    name: BNB
+    asset_class: CRYPTO
+    exchange: BINANCE
+    currency: USD
+    providers: { binance: "BNBUSDT", binance_futures: "BNBUSDT" }
+  - ticker: XRPUSD
+    name: XRP
+    asset_class: CRYPTO
+    exchange: BINANCE
+    currency: USD
+    providers: { binance: "XRPUSDT", binance_futures: "XRPUSDT" }
+
+  # ---------------- Macro / cross-asset context (Yahoo, keyless) ----------------
+  - ticker: DXY
+    name: US Dollar Index
+    asset_class: FX
+    exchange: ICE
+    currency: USD
+    providers: { yahoo: "DX-Y.NYB" }
+  - ticker: VIX
+    name: CBOE Volatility Index
+    asset_class: INDEX
+    exchange: CBOE
+    currency: USD
+    providers: { yahoo: "^VIX" }
+  - ticker: US10Y
+    name: US 10-Year Treasury Yield
+    asset_class: RATE
+    exchange: CBOE
+    currency: USD
+    providers: { yahoo: "^TNX" }
