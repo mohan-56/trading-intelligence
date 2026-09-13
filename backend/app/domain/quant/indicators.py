@@ -27,13 +27,25 @@ def _validate(values: np.ndarray, window: int) -> np.ndarray:
 
 
 def sma(values: np.ndarray, window: int) -> np.ndarray:
-    """Simple moving average."""
+    """Simple moving average.
+
+    Sliding-window mean, not a cumsum trick -- a cumsum-based SMA is not
+    NaN-safe: a single NaN poisons every subsequent cumulative sum, so one
+    early gap (a log-return series always has `window` leading NaNs by
+    design) makes every SMA value for the rest of the series NaN too, not
+    just the values whose own window still touches the gap. Found by a real
+    backtest: two strategies produced exactly zero trades across 8 years of
+    BTC history, traced to sma() silently returning all-NaN once fed a
+    returns series. A window recovers as soon as it no longer contains a
+    NaN, same as rolling_std below.
+    """
     v = _validate(values, window)
     out = np.full(len(v), np.nan)
     if len(v) < window:
         return out
-    cumsum = np.cumsum(np.insert(v, 0, 0.0))
-    out[window - 1:] = (cumsum[window:] - cumsum[:-window]) / window
+    windows = np.lib.stride_tricks.sliding_window_view(v, window)
+    with np.errstate(invalid="ignore"):
+        out[window - 1:] = np.where(np.isfinite(windows).all(axis=1), windows.mean(axis=1), np.nan)
     return out
 
 
@@ -109,6 +121,24 @@ def relative_strength(a: np.ndarray, b: np.ndarray, window: int) -> np.ndarray:
     """Return of A minus return of B -- is A beating B? Positive = A leading.
     ETH vs BTC over a rolling window is the standard 'alt season' read."""
     return log_return(a, window) - log_return(b, window)
+
+
+def rolling_zscore(values: np.ndarray, window: int) -> np.ndarray:
+    """Z-score against a fixed trailing window -- local/tactical, unlike
+    `expanding_zscore`'s regime-level normalization against all history.
+
+    A 21-day return that's +2 rolling-sigma is a sharp short-term move worth
+    reacting to; the same return might be unremarkable expanding-z if the
+    whole regime has been volatile. Both are causal (each window looks only
+    backward); they answer different questions, not competing versions of
+    the same one.
+    """
+    v = _validate(values, window)
+    mean = sma(v, window)
+    sd = rolling_std(v, window)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = (v - mean) / sd
+    return np.where(sd > 0, z, np.nan)
 
 
 def expanding_zscore(values: np.ndarray, min_periods: int = 60) -> np.ndarray:
