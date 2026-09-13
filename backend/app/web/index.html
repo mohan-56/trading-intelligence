@@ -4,160 +4,458 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Crypto Intelligence</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap">
 <style>
   :root{
-    --bg:#0a0e16; --panel:#10161f; --panel2:#161d2b; --line:#232b3a;
-    --fg:#ccd6e6; --dim:#7b879c; --accent:#59e3a0; --accent2:#57a9ff;
-    --pos:#59e3a0; --neg:#ff6b6b; --warn:#e7a53c;
-    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
-    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+    color-scheme: dark;
+    /* ground */
+    --void:#080b18; --panel:#0f1428; --panel2:#161c38; --panel3:#1c2348;
+    --line:#232a52; --line-bright:#3a4478;
+    /* ink */
+    --ink:#d7dbf5; --ink-dim:#8790c2; --ink-faint:#4d5490;
+    /* brand accents -- structural / "the system is alive" */
+    --cyan:#2ee6d6; --cyan-soft:rgba(46,230,214,.12); --cyan-line:rgba(46,230,214,.38);
+    --violet:#7c6fff; --violet-soft:rgba(124,111,255,.12);
+    /* semantic -- price direction, conventional, never repurposed */
+    --pos:#3ddc84; --pos-soft:rgba(61,220,132,.13);
+    --neg:#ff5470; --neg-soft:rgba(255,84,112,.13);
+    --warn:#ffb84d; --warn-soft:rgba(255,184,77,.12);
+    --font-display:'Chakra Petch',ui-sans-serif,system-ui,sans-serif;
+    --font-body:'Sora',-apple-system,'Segoe UI',Roboto,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
-  header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding:12px 18px;
-         border-bottom:1px solid var(--line);background:var(--panel)}
-  h1{font:600 14px var(--mono);margin:0;letter-spacing:.1em;text-transform:uppercase}
-  .sub{color:var(--dim);font:11px var(--mono)}
-  .spacer{flex:1}
-  .pill{padding:2px 8px;border:1px solid var(--line);border-radius:3px;font:11px var(--mono);color:var(--dim);background:var(--panel2)}
-  .pill.ok{color:var(--pos);border-color:#1f5e46}
-  .pill.bad{color:var(--neg);border-color:#5e2626}
+  @media (prefers-reduced-motion:no-preference){ html{scroll-behavior:smooth} }
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,111,255,.10), transparent 60%),
+      radial-gradient(ellipse 900px 500px at 100% 0%, rgba(46,230,214,.08), transparent 55%),
+      var(--void);
+    background-attachment:fixed;
+    color:var(--ink); font-family:var(--font-body); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; min-height:100%;
+  }
+  ::selection{background:var(--cyan-soft);color:var(--cyan)}
+  a{color:var(--cyan)}
+  a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
+    outline:2px solid var(--cyan);outline-offset:2px;border-radius:3px;
+  }
+  .tab{font-variant-numeric:tabular-nums}
+  code{font-family:var(--font-display);background:var(--panel2);border:1px solid var(--line);
+       padding:.1em .45em;border-radius:4px;font-size:.88em;color:var(--cyan)}
 
-  main{padding:16px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));max-width:1500px}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
-  section.wide{grid-column:1/-1}
-  h2{font:11px var(--mono);margin:0;padding:9px 14px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
-     border-bottom:1px solid var(--line);background:var(--panel2);display:flex;justify-content:space-between;gap:10px}
-  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block;margin-right:6px}
-  .live-dot.on{background:var(--pos);box-shadow:0 0 6px var(--pos)}
+  /* ---------------- shell: top bar + rail + content ---------------- */
+  .shell{display:grid;grid-template-rows:auto 1fr;min-height:100vh}
 
+  header.topbar{
+    display:flex;align-items:center;gap:18px;padding:13px 22px;
+    border-bottom:1px solid var(--line);background:rgba(8,11,24,.82);backdrop-filter:blur(10px);
+    position:sticky;top:0;z-index:30;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand-mark{width:26px;height:26px;border-radius:7px;flex:none;
+    background:linear-gradient(135deg,var(--cyan),var(--violet));
+    box-shadow:0 0 18px rgba(46,230,214,.35);
+    display:grid;place-items:center;font-family:var(--font-display);font-weight:700;
+    font-size:13px;color:var(--void);}
+  .brand h1{font-family:var(--font-display);font-weight:600;font-size:16px;margin:0;letter-spacing:.02em}
+  .brand .tag{font-size:10.5px;color:var(--ink-faint);letter-spacing:.14em;text-transform:uppercase;margin-top:1px}
+
+  .status-strip{display:flex;align-items:center;gap:10px;margin-left:auto;flex-wrap:wrap}
+  .status{display:flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--line);
+    border-radius:20px;font-family:var(--font-display);font-size:11.5px;color:var(--ink-dim);background:var(--panel)}
+  .status .num{color:var(--ink)}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--ink-faint);position:relative;flex:none}
+  .pulse.live{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .pulse.live::after{
+    content:"";position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--cyan);
+    animation:pulsering 1.8s ease-out infinite;
+  }
+  .pulse.bad{background:var(--neg)}
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes pulsering{0%{opacity:.9;transform:scale(.4)}100%{opacity:0;transform:scale(2.1)}}
+  }
+
+  .body-grid{display:grid;grid-template-columns:76px 1fr;min-height:0}
+
+  nav.rail{border-right:1px solid var(--line);padding:16px 0;display:flex;flex-direction:column;
+    align-items:center;gap:4px;position:sticky;top:57px;align-self:start;
+    height:calc(100vh - 57px);background:rgba(15,20,40,.35)}
+  nav.rail button{
+    width:56px;padding:9px 2px;background:none;border:1px solid transparent;border-radius:10px;
+    color:var(--ink-faint);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;
+    font-family:var(--font-display);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  }
+  nav.rail button svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6}
+  nav.rail button:hover{color:var(--ink);background:var(--panel)}
+  nav.rail button.active{color:var(--cyan);background:var(--cyan-soft);border-color:var(--cyan-line)}
+  nav.rail .rail-spacer{flex:1}
+  nav.rail .rail-foot{font-family:var(--font-display);font-size:8.5px;color:var(--ink-faint);
+    letter-spacing:.1em;writing-mode:vertical-rl;text-transform:uppercase;padding-bottom:10px}
+
+  main{padding:22px 26px 60px;min-width:0}
+  .view{display:none}
+  .view.active{display:block}
+
+  .view-head{margin-bottom:20px}
+  .eyebrow{font-family:var(--font-display);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--cyan);margin-bottom:6px;display:flex;align-items:center;gap:9px}
+  .eyebrow .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--line-bright),transparent)}
+  h2{font-family:var(--font-display);font-weight:600;font-size:21px;margin:0 0 6px;text-wrap:balance}
+  .view-head p{margin:0;color:var(--ink-dim);max-width:62ch;font-size:13px}
+
+  /* ---------------- hero ticker cockpit ---------------- */
+  .ticker-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-bottom:22px}
+  .tcard{
+    background:linear-gradient(160deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-radius:12px;padding:15px 16px;position:relative;overflow:hidden;
+    transition:border-color .25s;
+  }
+  .tcard.flash-up{border-color:var(--pos)}
+  .tcard.flash-down{border-color:var(--neg)}
+  .tcard::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .5s}
+  .tcard.flash-up::before{background:radial-gradient(circle at 50% 0%,var(--pos-soft),transparent 70%);opacity:1}
+  .tcard.flash-down::before{background:radial-gradient(circle at 50% 0%,var(--neg-soft),transparent 70%);opacity:1}
+  .tc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px;position:relative}
+  .tc-sym{font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.03em;color:var(--ink)}
+  .tc-name{font-size:10.5px;color:var(--ink-faint);margin-top:1px}
+  .tc-chg{font-family:var(--font-display);font-weight:600;font-size:12.5px;padding:2px 8px;border-radius:20px}
+  .tc-chg.pos{color:var(--pos);background:var(--pos-soft)}
+  .tc-chg.neg{color:var(--neg);background:var(--neg-soft)}
+  .tc-price{font-family:var(--font-display);font-weight:700;font-size:28px;margin:8px 0 2px;
+    letter-spacing:-.01em;position:relative}
+  .tc-spark{margin:6px -4px 4px;height:40px}
+  .tc-spark svg{width:100%;height:100%;display:block}
+  .tc-meta{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-faint);
+    font-family:var(--font-display);margin-top:6px;padding-top:8px;border-top:1px solid var(--line)}
+  .tc-meta b{color:var(--ink-dim);font-weight:500}
+
+  /* ---------------- instrument panels ---------------- */
+  .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel-h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:var(--panel2)}
+  .panel-h .t{font-family:var(--font-display);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+  .panel-h .n{font-family:var(--font-display);font-size:11px;color:var(--cyan)}
+  .panel-body{padding:4px 0}
   table{width:100%;border-collapse:collapse;font-size:12px}
-  th{position:sticky;top:0;background:var(--panel2);color:var(--dim);font-weight:500;text-align:right;
-     padding:6px 12px;font:10px var(--mono);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  th{text-align:right;color:var(--ink-faint);font-family:var(--font-display);font-size:9.5px;
+    letter-spacing:.06em;text-transform:uppercase;padding:6px 14px;font-weight:500}
   th:first-child,td:first-child{text-align:left}
-  td{padding:6px 12px;text-align:right;border-bottom:1px solid rgba(35,43,58,.5);white-space:nowrap;
-     font-variant-numeric:tabular-nums}
-  tr:hover td{background:rgba(90,169,255,.06)}
-  .ticker{font-family:var(--mono);font-size:15px;font-weight:600}
-  .pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--dim)}
+  td{padding:6px 14px;text-align:right;border-top:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+  tr:hover td{background:var(--panel3)}
+  .sym{font-family:var(--font-display);font-weight:600;color:var(--ink)}
+  .dim{color:var(--ink-faint)}
+  .ok-tag{color:var(--cyan)}
+  .bad-tag{color:var(--neg)}
 
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:6px;padding:12px}
-  .card{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:7px 9px}
-  .card .t{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
-  .card .v{font-size:14px;margin-top:2px;font-variant-numeric:tabular-nums}
-  .card .m{font:10px var(--mono);color:var(--dim);margin-top:1px}
-  .empty{padding:24px 16px;color:var(--dim);text-align:center;line-height:1.7}
-  code{background:var(--panel2);padding:2px 6px;border-radius:3px;color:var(--accent2)}
-  footer{padding:14px 18px;color:var(--dim);font-size:11px;border-top:1px solid var(--line)}
-  a{color:var(--accent2)}
+  /* ---------------- coming-soon placeholders ---------------- */
+  .soon{
+    border:1px dashed var(--line-bright);border-radius:14px;padding:44px 28px;text-align:center;
+    background:radial-gradient(ellipse 500px 200px at 50% 0%,var(--violet-soft),transparent 70%);
+  }
+  .soon .icon{width:46px;height:46px;margin:0 auto 16px;color:var(--violet);opacity:.85}
+  .soon .icon svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.3}
+  .soon h3{font-family:var(--font-display);font-size:17px;margin:0 0 8px;color:var(--ink)}
+  .soon p{color:var(--ink-dim);font-size:13px;max-width:46ch;margin:0 auto 16px;line-height:1.65}
+  .soon .badge{display:inline-block;font-family:var(--font-display);font-size:10.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--violet);background:var(--violet-soft);border:1px solid rgba(124,111,255,.35);
+    padding:4px 12px;border-radius:20px}
+
+  footer{padding:22px 26px 30px;border-top:1px solid var(--line);color:var(--ink-faint);font-size:11.5px;
+    line-height:1.7;max-width:78ch}
+  footer code{font-size:.95em}
+
+  /* ---------------- responsive ---------------- */
+  @media (max-width:760px){
+    .body-grid{grid-template-columns:56px 1fr}
+    nav.rail{padding:12px 0}
+    nav.rail button{width:44px;font-size:8px}
+    nav.rail button svg{width:16px;height:16px}
+    main{padding:16px}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Crypto Intelligence</h1>
-  <span class="sub" id="asof">connecting&hellip;</span>
-  <span class="spacer"></span>
-  <span class="pill" id="p-live"><span class="live-dot" id="live-dot"></span>live: connecting</span>
-  <span class="pill" id="p-symbols">&mdash;</span>
-  <span class="pill" id="p-lake">&mdash;</span>
-</header>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">CI</div>
+      <div>
+        <h1>Crypto Intelligence</h1>
+        <div class="tag">Research &amp; decision support &mdash; not advice</div>
+      </div>
+    </div>
+    <div class="status-strip">
+      <span class="status"><span class="pulse" id="live-pulse"></span><span id="live-label">connecting</span></span>
+      <span class="status">symbols <span class="num tab" id="s-symbols">&mdash;</span></span>
+      <span class="status">lake <span class="num tab" id="s-lake">&mdash;</span></span>
+    </div>
+  </header>
 
-<main>
-  <section class="wide">
-    <h2><span><span class="live-dot" id="live-dot2"></span>Live &mdash; streamed directly from Binance, no backend involved</span>
-        <span id="live-note" class="dim" style="font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
-    <div id="live"><div class="empty">opening WebSocket to Binance&hellip;</div></div>
-  </section>
+  <div class="body-grid">
+    <nav class="rail" id="rail">
+      <button data-view="overview" class="active" title="Overview">
+        <svg viewBox="0 0 24 24"><path d="M3 12l4-4 4 4 6-8 4 4"/><path d="M3 20h18"/></svg>
+        Live
+      </button>
+      <button data-view="regime" title="Regime">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/></svg>
+        Regime
+      </button>
+      <button data-view="analogues" title="Analogues">
+        <svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.2"/><circle cx="17" cy="7" r="3.2"/><circle cx="12" cy="17" r="3.2"/><path d="M9.3 8.8L14.7 15.2M9.3 15.2L14.7 8.8"/></svg>
+        Analogs
+      </button>
+      <button data-view="strategies" title="Strategies">
+        <svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V4M18 19v-6"/></svg>
+        Strategy
+      </button>
+      <button data-view="journal" title="Journal">
+        <svg viewBox="0 0 24 24"><path d="M5 4h14v16l-7-4-7 4z"/></svg>
+        Journal
+      </button>
+      <div class="rail-spacer"></div>
+      <div class="rail-foot">CRYPTO&nbsp;INTELLIGENCE</div>
+    </nav>
 
-  <section class="wide">
-    <h2>Data coverage <span class="dim" id="cov-note" style="font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
-    <div><div class="grid" id="cov"></div></div>
-  </section>
-</main>
+    <main>
+      <!-- ================= OVERVIEW ================= -->
+      <section class="view active" id="view-overview">
+        <div class="view-head">
+          <div class="eyebrow">Block A &middot; live<span class="rule"></span></div>
+          <h2>Live market &mdash; streamed straight from Binance</h2>
+          <p>No backend in this loop: your browser holds one WebSocket open to Binance's public stream. Sparklines below are real ingested history, not decoration.</p>
+        </div>
+        <div class="ticker-grid" id="ticker-grid"></div>
 
-<footer>
-  Research and decision support. Nothing here is investment advice, and no number on this page is a prediction.
-  Live prices stream straight from Binance's public WebSocket &mdash; this page never asks its own backend for them.
-  <br>API: <a href="/docs">/docs</a>
-</footer>
+        <div class="view-head" style="margin-top:8px">
+          <div class="eyebrow">Data layer<span class="rule"></span></div>
+          <h2>Coverage across all four series</h2>
+          <p>What's actually stored, read straight from the lake &mdash; nothing here is computed on request.</p>
+        </div>
+        <div class="panels" id="coverage-panels"></div>
+      </section>
+
+      <!-- ================= REGIME ================= -->
+      <section class="view" id="view-regime">
+        <div class="view-head">
+          <div class="eyebrow">Block B<span class="rule"></span></div>
+          <h2>Regime detection</h2>
+          <p>What kind of market this is right now &mdash; risk-on/off, volatility expanding or compressing, trending or ranging.</p>
+        </div>
+        <div class="soon">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/></svg></div>
+          <h3>Not built yet</h3>
+          <p>The state vector is ingesting (see Live). The regime classifier that reads it &mdash; and the evidence behind every label &mdash; is next.</p>
+          <span class="badge">Block B &middot; up next</span>
+        </div>
+      </section>
+
+      <!-- ================= ANALOGUES ================= -->
+      <section class="view" id="view-analogues">
+        <div class="view-head">
+          <div class="eyebrow">Block B<span class="rule"></span></div>
+          <h2>Historical analogues</h2>
+          <p>Past periods that resembled today, with what happened next &mdash; a range, not a guess, and the sample size shown next to it.</p>
+        </div>
+        <div class="soon">
+          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.2"/><circle cx="17" cy="7" r="3.2"/><circle cx="12" cy="17" r="3.2"/><path d="M9.3 8.8L14.7 15.2M9.3 15.2L14.7 8.8"/></svg></div>
+          <h3>Not built yet</h3>
+          <p>Needs the regime engine's state vector first, then episode-guarded nearest-neighbour search over 15 years of history.</p>
+          <span class="badge">Block B &middot; up next</span>
+        </div>
+      </section>
+
+      <!-- ================= STRATEGIES ================= -->
+      <section class="view" id="view-strategies">
+        <div class="view-head">
+          <div class="eyebrow">Block C<span class="rule"></span></div>
+          <h2>Strategies &amp; backtests</h2>
+          <p>Momentum, mean-reversion, breakout, funding-rate carry &mdash; tested honestly on real history, ranked by what worked in conditions like today's.</p>
+        </div>
+        <div class="soon">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V4M18 19v-6"/></svg></div>
+          <h3>Not built yet</h3>
+          <p>The backtester and risk engine come after regime detection &mdash; this is the block that has to be right, not fast.</p>
+          <span class="badge">Block C &middot; after regime</span>
+        </div>
+      </section>
+
+      <!-- ================= JOURNAL ================= -->
+      <section class="view" id="view-journal">
+        <div class="view-head">
+          <div class="eyebrow">Later<span class="rule"></span></div>
+          <h2>Decision journal</h2>
+          <p>Your own reasoning and size, logged before the outcome, reviewed after. This is what actually makes you better &mdash; more than any signal on this page.</p>
+        </div>
+        <div class="soon">
+          <div class="icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16l-7-4-7 4z"/></svg></div>
+          <h3>Not built yet</h3>
+          <p>Simple by design: a form and a SQLite table. Comes once there's something worth journaling a decision about.</p>
+          <span class="badge">Planned</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    Research and decision support. Nothing on this page is investment advice, and no number here is a prediction.
+    Live prices stream directly from Binance's public WebSocket &mdash; this page never asks its own backend for them.
+    API: <a href="/docs">/docs</a>
+  </footer>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
-const fmt = (v, d=2) => v==null||!isFinite(v) ? "&mdash;" : v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
-const fmtPx = v => v==null ? "&mdash;" : (v>=1000 ? v.toLocaleString(undefined,{maximumFractionDigits:2}) : v.toLocaleString(undefined,{maximumFractionDigits:v<1?6:4}));
+const $$ = s => Array.from(document.querySelectorAll(s));
+async function get(path){ try{ const r = await fetch(path); return {ok:r.ok, body: await r.json().catch(()=>({}))}; } catch(e){ return {ok:false, body:{}}; } }
 
-async function get(path){ const r = await fetch(path); return {ok:r.ok, body: await r.json().catch(()=>({}))}; }
+// ---------------- view switching ----------------
+$$("nav.rail button").forEach(btn => btn.addEventListener("click", () => {
+  $$("nav.rail button").forEach(b => b.classList.toggle("active", b === btn));
+  $$(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + btn.dataset.view));
+}));
 
-// ---------- live ticker: browser -> Binance, direct, no backend ----------
-const PAIRS = ["btcusdt","ethusdt","solusdt","bnbusdt","xrpusdt"];
-const live = {};
-PAIRS.forEach(p => live[p] = null);
-
-function renderLive(){
-  const rows = PAIRS.map(p => {
-    const t = live[p];
-    if (!t) return `<tr><td class="ticker">${p.replace("usdt","").toUpperCase()}</td><td colspan="4" class="dim">waiting for first tick&hellip;</td></tr>`;
-    const chg = parseFloat(t.P);
-    const cls = chg > 0 ? "pos" : chg < 0 ? "neg" : "dim";
-    const sign = chg > 0 ? "+" : "";
-    return `<tr>
-      <td class="ticker">${p.replace("usdt","").toUpperCase()}</td>
-      <td>$${fmtPx(parseFloat(t.c))}</td>
-      <td class="${cls}">${sign}${chg.toFixed(2)}%</td>
-      <td class="dim">$${fmtPx(parseFloat(t.h))}</td>
-      <td class="dim">$${fmtPx(parseFloat(t.l))}</td>
-      <td class="dim">${(parseFloat(t.q)/1e6).toFixed(1)}M</td>
-    </tr>`;
-  }).join("");
-  $("#live").innerHTML = `<table>
-    <thead><tr><th>pair</th><th>last</th><th>24h</th><th>24h high</th><th>24h low</th><th>24h quote vol</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+// ---------------- sparkline (real history, drawn to scale) ----------------
+function sparkline(points, colour){
+  if (!points || points.length < 2) return "";
+  const w = 240, h = 40, pad = 3;
+  const vals = points.map(p => p.close);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = (hi - lo) || 1;
+  const x = i => pad + (i / (points.length - 1)) * (w - pad * 2);
+  const y = v => h - pad - ((v - lo) / span) * (h - pad * 2);
+  const line = vals.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(vals.length - 1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+  const lastX = x(vals.length - 1), lastY = y(vals[vals.length - 1]);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="price trend">
+    <path d="${area}" fill="${colour}" opacity="0.14"/>
+    <path d="${line}" fill="none" stroke="${colour}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.6" fill="${colour}"/>
+  </svg>`;
 }
-renderLive();
+
+// ---------------- live ticker: browser -> Binance, direct ----------------
+const PAIRS = [
+  {sym:"btcusdt", ticker:"BTCUSD", name:"Bitcoin"},
+  {sym:"ethusdt", ticker:"ETHUSD", name:"Ethereum"},
+  {sym:"solusdt", ticker:"SOLUSD", name:"Solana"},
+  {sym:"bnbusdt", ticker:"BNBUSD", name:"BNB"},
+  {sym:"xrpusdt", ticker:"XRPUSD", name:"XRP"},
+];
+const live = {}, history = {}, prevPrice = {};
+
+function fmtPx(v){
+  if (v == null) return "&mdash;";
+  const n = parseFloat(v);
+  return n >= 1000 ? n.toLocaleString(undefined,{maximumFractionDigits:2})
+       : n.toLocaleString(undefined,{maximumFractionDigits:n < 1 ? 6 : 4});
+}
+
+function renderTicker(){
+  $("#ticker-grid").innerHTML = PAIRS.map(p => {
+    const t = live[p.sym];
+    const hist = history[p.ticker];
+    const colour = t && parseFloat(t.P) < 0 ? "var(--neg)" : "var(--pos)";
+    const spark = hist ? sparkline(hist, colour.startsWith("var") ? (colour.includes("neg") ? "#ff5470" : "#3ddc84") : colour) : "";
+    if (!t){
+      return `<div class="tcard" id="tc-${p.sym}">
+        <div class="tc-top"><div><div class="tc-sym">${p.ticker.replace("USD","")}</div><div class="tc-name">${p.name}</div></div></div>
+        <div class="tc-price dim">connecting&hellip;</div>
+        <div class="tc-spark">${spark}</div>
+      </div>`;
+    }
+    const chg = parseFloat(t.P);
+    const cls = chg >= 0 ? "pos" : "neg";
+    const sign = chg >= 0 ? "+" : "";
+    return `<div class="tcard" id="tc-${p.sym}">
+      <div class="tc-top">
+        <div><div class="tc-sym">${p.ticker.replace("USD","")}</div><div class="tc-name">${p.name}</div></div>
+        <div class="tc-chg ${cls}">${sign}${chg.toFixed(2)}%</div>
+      </div>
+      <div class="tc-price tab" id="tp-${p.sym}">$${fmtPx(t.c)}</div>
+      <div class="tc-spark">${spark}</div>
+      <div class="tc-meta">
+        <span>24h high <b>$${fmtPx(t.h)}</b></span>
+        <span>24h low <b>$${fmtPx(t.l)}</b></span>
+      </div>
+    </div>`;
+  }).join("");
+}
+renderTicker();
+
+function flashTick(sym, up){
+  const card = document.getElementById("tc-" + sym);
+  if (!card) return;
+  card.classList.remove("flash-up", "flash-down");
+  void card.offsetWidth; // restart the CSS transition
+  card.classList.add(up ? "flash-up" : "flash-down");
+  clearTimeout(card._flashTimer);
+  card._flashTimer = setTimeout(() => card.classList.remove("flash-up", "flash-down"), 900);
+}
 
 function connectLive(){
-  const streams = PAIRS.map(p => `${p}@ticker`).join("/");
+  const streams = PAIRS.map(p => `${p.sym}@ticker`).join("/");
   const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
 
   ws.onopen = () => {
-    $("#p-live").className = "pill ok";
-    $("#p-live").innerHTML = '<span class="live-dot on" id="live-dot"></span>live: connected';
-    $("#live-dot2").className = "live-dot on";
-    $("#live-note").textContent = "wss://stream.binance.com · 5 pairs, one connection";
+    $("#live-pulse").className = "pulse live";
+    $("#live-label").textContent = "live · 5 pairs";
   };
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    const sym = (msg.data && msg.data.s || "").toLowerCase();
-    if (sym && sym in live){ live[sym] = msg.data; renderLive(); }
-    $("#asof").textContent = "last tick " + new Date().toLocaleTimeString();
+    const d = msg.data; if (!d) return;
+    const sym = (d.s || "").toLowerCase();
+    const price = parseFloat(d.c);
+    if (prevPrice[sym] != null && price !== prevPrice[sym]) flashTick(sym, price > prevPrice[sym]);
+    prevPrice[sym] = price;
+    live[sym] = d;
+    renderTicker();
   };
   ws.onclose = () => {
-    $("#p-live").className = "pill bad";
-    $("#p-live").innerHTML = '<span class="live-dot" id="live-dot"></span>live: disconnected, retrying&hellip;';
-    $("#live-dot2").className = "live-dot";
+    $("#live-pulse").className = "pulse bad";
+    $("#live-label").textContent = "reconnecting…";
     setTimeout(connectLive, 3000);
   };
   ws.onerror = () => ws.close();
 }
 connectLive();
 
-// ---------- coverage: precomputed, read from our own API ----------
+// ---------------- real history for sparklines, via our own API ----------------
+async function loadHistory(){
+  for (const p of PAIRS){
+    const {ok, body} = await get(`/api/v1/bars/${p.ticker}?max_points=60`);
+    if (ok && body.bars && body.bars.length > 1){
+      history[p.ticker] = body.bars;
+      renderTicker();
+    }
+  }
+}
+
+// ---------------- coverage: precomputed, read from our own API ----------------
 async function loadCoverage(){
   const {ok, body} = await get("/api/v1/coverage");
   if (!ok) return;
-  $("#cov").innerHTML = body.symbols.map(s => {
+  const rows = body.symbols.map(s => {
     const has = s.rows > 0;
     const lat = (s.provenance && s.provenance.latency) || "UNAVAILABLE";
-    const cls = !has ? "neg" : (lat === "LIVE" ? "pos" : "");
-    return `<div class="card">
-      <div class="t">${s.ticker}</div>
-      <div class="v ${cls}">${has ? s.rows.toLocaleString() : "no data"}</div>
-      <div class="m">${has ? (s.end||"").slice(0,10) + " · " + lat : lat}</div>
-    </div>`;
+    return `<tr>
+      <td class="sym">${s.ticker}</td>
+      <td class="${has ? "ok-tag" : "bad-tag"}">${has ? s.rows.toLocaleString() : "no data"}</td>
+      <td class="dim">${has ? (s.end||"").slice(0,10) : "&mdash;"}</td>
+      <td class="${has ? "ok-tag" : "dim"}">${lat}</td>
+    </tr>`;
   }).join("");
-  $("#cov-note").textContent = `${body.with_data}/${body.count} symbols`;
-  $("#p-symbols").textContent = `${body.with_data}/${body.count} symbols`;
-  $("#p-symbols").className = "pill " + (body.with_data === body.count ? "ok" : "");
+  $("#coverage-panels").innerHTML = `
+    <div class="panel" style="grid-column:1/-1">
+      <div class="panel-h"><span class="t">Spot &amp; context series</span><span class="n">${body.with_data}/${body.count}</span></div>
+      <div class="panel-body"><table>
+        <thead><tr><th>symbol</th><th>rows</th><th>as of</th><th>latency</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  $("#s-symbols").textContent = `${body.with_data}/${body.count}`;
 }
 
 async function loadStatus(){
@@ -165,11 +463,12 @@ async function loadStatus(){
   if (!ok) return;
   const bars = body.lakes && body.lakes.bars;
   const mb = bars ? bars.bytes/1048576 : 0;
-  $("#p-lake").textContent = `lake: ${bars ? bars.files : 0} files · ${mb.toFixed(1)} MB`;
+  $("#s-lake").textContent = `${bars ? bars.files : 0} files · ${mb.toFixed(1)}MB`;
 }
 
 loadStatus();
 loadCoverage();
+loadHistory();
 </script>
 </body>
 </html>
