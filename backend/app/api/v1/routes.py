@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, Request
 from app.core.config import features_config
 from app.core.errors import DataUnavailable
 from app.domain.analogue.engine import find_analogues
+from app.domain.backtest.store import load_results
 from app.domain.quant.features import latest_snapshot
 from app.domain.regime.engine import classify_history, classify_latest
 from app.domain.symbols.models import Timeframe
@@ -141,3 +142,28 @@ async def analogues_latest(request: Request, when: datetime | None = None) -> di
         version=matrix.version,
     )
     return result.to_dict()
+
+
+@router.get("/backtest/strategies", tags=["backtest"])
+async def backtest_strategies(request: Request, symbol: str = "BTCUSD") -> dict:
+    """Reads precomputed results -- never runs a backtest on a request.
+
+    First version computed all 4 strategies live: measured 27 seconds end to
+    end. Profiled it: 79% of a single backtest's time was RiskEngine.size()
+    recomputing a full rolling-volatility series over the ENTIRE (ever-
+    growing) clipped history at every bar, just to read its last value --
+    O(n) of wasted work per bar, O(n^2) over the run. Slicing to the small
+    tail the calculation actually needs (risk.py) cut a single backtest from
+    ~1.5s to ~0.7s -- real, but still ~3s for four strategies, still too
+    slow for a request. Moved to the same precompute-then-serve pattern as
+    regime and the state vector: scripts/run_backtest.py runs it, saves it,
+    and this endpoint only ever reads the file.
+    """
+    bars_lake = request.app.state.lakes.get("bars")
+    saved = load_results(bars_lake.root, symbol)
+    if saved is None:
+        raise DataUnavailable(
+            f"no precomputed backtest for {symbol}",
+            detail={"fix": f"python scripts/run_backtest.py --symbol {symbol}"},
+        )
+    return saved

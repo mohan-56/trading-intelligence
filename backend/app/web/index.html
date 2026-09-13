@@ -188,6 +188,14 @@
   .unreliable-note{font-size:10px;color:var(--warn);font-family:var(--font-display);display:block;margin-top:2px}
   .fwd-pos{color:var(--pos)} .fwd-neg{color:var(--neg)}
 
+  /* ---------------- strategy view ---------------- */
+  .strat-table td.name{font-family:var(--font-display);color:var(--ink);text-align:left}
+  .strat-table td.desc{text-align:left;color:var(--ink-faint);font-size:11px;max-width:220px;white-space:normal}
+  .strat-table tr.baseline td.name{color:var(--cyan)}
+  .mini-spark{width:110px;height:28px}
+  .mini-spark svg{width:100%;height:100%;display:block}
+  .metric-good{color:var(--pos)} .metric-bad{color:var(--neg)}
+
   /* ---------------- coming-soon placeholders ---------------- */
   .soon{
     border:1px dashed var(--line-bright);border-radius:14px;padding:44px 28px;text-align:center;
@@ -301,14 +309,9 @@
         <div class="view-head">
           <div class="eyebrow">Block C<span class="rule"></span></div>
           <h2>Strategies &amp; backtests</h2>
-          <p>Momentum, mean-reversion, breakout, funding-rate carry &mdash; tested honestly on real history, ranked by what worked in conditions like today's.</p>
+          <p>Signal at bar t fills at bar (t+1)'s open, never its own close. Position size comes from trailing volatility, never from the strategy's own conviction. Costs are charged on every turnover.</p>
         </div>
-        <div class="soon">
-          <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V4M18 19v-6"/></svg></div>
-          <h3>Not built yet</h3>
-          <p>The backtester and risk engine come after regime detection &mdash; this is the block that has to be right, not fast.</p>
-          <span class="badge">Block C &middot; after regime</span>
-        </div>
+        <div id="strategy-body"><div class="empty-note">running backtests&hellip;</div></div>
       </section>
 
       <!-- ================= JOURNAL ================= -->
@@ -602,11 +605,59 @@ async function loadAnalogues(){
     </div>`;
 }
 
+// ---------------- strategies: real backtests, computed on request ----------------
+async function loadStrategies(){
+  const {ok, body} = await get("/api/v1/backtest/strategies?symbol=BTCUSD");
+  const el = $("#strategy-body");
+  if (!ok){
+    const fix = (body.error && body.error.detail && body.error.detail.fix) || "python scripts/run_backtest.py";
+    el.innerHTML = `<div class="soon">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 19V9M11 19V4M18 19v-6"/></svg></div>
+      <h3>Not built yet</h3>
+      <p>Results are precomputed, never run live. Run <code>${fix}</code> then reload this view.</p>
+    </div>`;
+    return;
+  }
+
+  const rows = body.results.map(r => {
+    if (r.error) return `<tr><td class="name">${r.strategy}</td><td class="desc" colspan="9">${r.error}</td></tr>`;
+    const m = r.metrics;
+    const cls = v => v >= 0 ? "metric-good" : "metric-bad";
+    const pct = v => (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+    const spark = r.equity_curve && r.equity_curve.length > 1
+      ? sparkline(r.equity_curve.map(p => ({close: p.equity})), m.total_return >= 0 ? "#3ddc84" : "#ff5470")
+      : "&mdash;";
+    return `<tr class="${r.strategy === 'buy_and_hold' ? 'baseline' : ''}">
+      <td class="name">${r.strategy}${r.strategy === 'buy_and_hold' ? ' <span class="dim">(baseline)</span>' : ''}</td>
+      <td class="desc">${r.description}</td>
+      <td class="${cls(m.total_return)}">${pct(m.total_return)}</td>
+      <td class="${cls(m.cagr)}">${pct(m.cagr)}</td>
+      <td class="dim">${(m.annualized_vol * 100).toFixed(1)}%</td>
+      <td>${m.sharpe.toFixed(2)}</td>
+      <td class="metric-bad">${pct(m.max_drawdown)}</td>
+      <td class="dim">${m.n_trades}</td>
+      <td class="dim">${m.win_rate ? (m.win_rate * 100).toFixed(0) + "%" : "&mdash;"}</td>
+      <td><div class="mini-spark">${spark}</div></td>
+    </tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-h"><span class="t">${body.symbol} &middot; 2018&ndash;present, 10bps cost, vol-targeted sizing</span><span class="n">${body.results.length} strategies</span></div>
+      <div class="panel-body"><table class="strat-table">
+        <thead><tr><th style="text-align:left">strategy</th><th style="text-align:left">what it does</th><th>total ret</th><th>cagr</th><th>vol</th><th>sharpe</th><th>max dd</th><th>trades</th><th>win%</th><th>equity</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>
+    <p class="fine" style="margin-top:10px">Buy &amp; Hold is the baseline every strategy has to actually beat &mdash; a strategy that can't outperform it risk-adjusted isn't earning its own complexity. In-sample only: no train/test split or walk-forward validation yet.</p>`;
+}
+
 loadStatus();
 loadCoverage();
 loadHistory();
 loadRegime();
 loadAnalogues();
+loadStrategies();
 </script>
 </body>
 </html>
