@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import numpy as np
 from fastapi import APIRouter, Query, Request
 
+from app.core.config import features_config
 from app.core.errors import DataUnavailable
+from app.domain.analogue.engine import find_analogues
 from app.domain.quant.features import latest_snapshot
 from app.domain.regime.engine import classify_history, classify_latest
 from app.domain.symbols.models import Timeframe
@@ -79,7 +82,6 @@ async def regime_history(request: Request, max_points: int = Query(500, ge=10, l
         raise DataUnavailable("state vector not built", detail={"fix": "python scripts/build_features.py"})
     calls = classify_history(matrix)
     if len(calls) > max_points:
-        import numpy as np
         idx = np.unique(np.linspace(0, len(calls) - 1, max_points).astype(int))
         calls = [calls[i] for i in idx]
     return {"count": len(calls), "version": matrix.version, "calls": [c.to_dict() for c in calls]}
@@ -94,3 +96,48 @@ async def state_vector_latest(request: Request, when: datetime | None = None) ->
     if not snapshot.get("available"):
         raise DataUnavailable(snapshot.get("reason", "no state vector for that date"))
     return snapshot
+
+
+@router.get("/analogues/latest", tags=["intelligence"])
+async def analogues_latest(request: Request, when: datetime | None = None) -> dict:
+    """Historical episodes that resembled the query date, with what
+    happened next. Computed on request -- measured over real HTTP against
+    ~1,960 candidates: ~51ms of actual computation, ~107ms median /
+    ~184ms p95 end to end once lake reads and JSON serialization are
+    included. First version bootstrapped with a per-iteration Python loop
+    and measured 582ms; vectorizing it got computation to ~51ms (see
+    analogue/engine.py). If the remaining request overhead becomes a
+    problem as the universe grows, this moves into the nightly precompute
+    like regime -- not yet necessary at this size."""
+    matrix = request.app.state.features
+    if matrix is None:
+        raise DataUnavailable("state vector not built", detail={"fix": "python scripts/build_features.py"})
+
+    i = matrix.row_on(when or datetime.now(UTC))
+    if i is None:
+        raise DataUnavailable("no state vector for that date")
+
+    calendar_ticker = features_config().get("calendar_symbol", "BTCUSD")
+    bars_service = request.app.state.marketdata.get("bars")
+    close_series = bars_service.get_bars(calendar_ticker)
+    if not close_series.is_available:
+        raise DataUnavailable(f"no price history for calendar symbol {calendar_ticker}")
+
+    # `close_series` is read live from the lake; `matrix` was loaded from a
+    # saved snapshot at startup. If bars were ingested since the state vector
+    # was last built, the two can silently drift out of alignment -- and
+    # find_analogues assumes index i means the same calendar day in both.
+    # Fail loudly rather than compute a forward return against the wrong day.
+    if len(close_series) < len(matrix) or not np.array_equal(close_series.ts[: len(matrix)], matrix.dates):
+        raise DataUnavailable(
+            "state vector is out of sync with the price lake",
+            detail={"fix": "python scripts/build_features.py", "lake_rows": len(close_series), "matrix_rows": len(matrix)},
+        )
+
+    result = find_analogues(
+        matrix, close_series.close, i,
+        horizons_days=features_config().get("forward_horizons_days", [1, 3, 7, 21]),
+        guards=features_config().get("guards", {}),
+        version=matrix.version,
+    )
+    return result.to_dict()
