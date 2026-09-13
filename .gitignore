@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+*.duckdb
+*.sqlite
+*.sqlite-journal
+data/
+node_modules/
