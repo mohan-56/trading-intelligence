@@ -149,6 +149,36 @@
   .ok-tag{color:var(--cyan)}
   .bad-tag{color:var(--neg)}
 
+  /* ---------------- regime view ---------------- */
+  .empty-note{color:var(--ink-faint);font-size:13px;padding:20px 2px}
+  .regime-hero{
+    background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line-bright);
+    border-radius:14px;padding:22px 24px;margin-bottom:16px;display:flex;align-items:center;
+    gap:22px;flex-wrap:wrap;
+  }
+  .regime-label{font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.01em;
+    background:linear-gradient(90deg,var(--cyan),var(--violet));-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  .regime-sub{font-size:12px;color:var(--ink-dim);margin-top:3px}
+  .conf-wrap{margin-left:auto;text-align:right;min-width:150px}
+  .conf-label{font-family:var(--font-display);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:6px}
+  .conf-bar{width:150px;height:6px;border-radius:4px;background:var(--panel3);overflow:hidden}
+  .conf-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--violet));border-radius:4px}
+  .conf-val{font-family:var(--font-display);font-size:13px;color:var(--ink);margin-top:5px}
+  .incomplete-warn{color:var(--warn);font-size:11px;margin-top:6px;font-family:var(--font-display)}
+
+  .axis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}
+  .axis-card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  .axis-card .t{font-family:var(--font-display);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:5px}
+  .axis-card .v{font-family:var(--font-display);font-weight:600;font-size:14.5px;color:var(--ink)}
+  .axis-card .v.hot{color:var(--cyan)}
+
+  .evidence-table th{text-align:right}
+  .evidence-table td.reads{text-align:left;color:var(--ink-dim);white-space:normal;max-width:340px}
+  .evidence-table td.feat{font-family:var(--font-display);color:var(--ink)}
+
   /* ---------------- coming-soon placeholders ---------------- */
   .soon{
     border:1px dashed var(--line-bright);border-radius:14px;padding:44px 28px;text-align:center;
@@ -242,14 +272,9 @@
         <div class="view-head">
           <div class="eyebrow">Block B<span class="rule"></span></div>
           <h2>Regime detection</h2>
-          <p>What kind of market this is right now &mdash; risk-on/off, volatility expanding or compressing, trending or ranging.</p>
+          <p>Rule-based, not a black box: every label traces back to the exact feature values and thresholds that produced it &mdash; shown below as evidence, not asserted.</p>
         </div>
-        <div class="soon">
-          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/></svg></div>
-          <h3>Not built yet</h3>
-          <p>The state vector is ingesting (see Live). The regime classifier that reads it &mdash; and the evidence behind every label &mdash; is next.</p>
-          <span class="badge">Block B &middot; up next</span>
-        </div>
+        <div id="regime-body"><div class="empty-note">loading&hellip;</div></div>
       </section>
 
       <!-- ================= ANALOGUES ================= -->
@@ -466,9 +491,61 @@ async function loadStatus(){
   $("#s-lake").textContent = `${bars ? bars.files : 0} files · ${mb.toFixed(1)}MB`;
 }
 
+// ---------------- regime: precomputed, read from our own API ----------------
+async function loadRegime(){
+  const {ok, body} = await get("/api/v1/regime/latest");
+  const el = $("#regime-body");
+  if (!ok){
+    const fix = (body.error && body.error.detail && body.error.detail.fix) || "python scripts/build_features.py";
+    el.innerHTML = `<div class="soon">
+      <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/></svg></div>
+      <h3>State vector not built</h3>
+      <p>Run <code>${fix}</code> then reload this view.</p>
+    </div>`;
+    return;
+  }
+
+  const confPct = Math.round((body.confidence || 0) * 100);
+
+  el.innerHTML = `
+    <div class="regime-hero">
+      <div>
+        <div class="regime-label">${body.trend} &middot; ${body.volatility}</div>
+        <div class="regime-sub">as of ${body.date} &middot; label <code>${body.label}</code>${body.complete ? "" : " &middot; incomplete inputs"}</div>
+        ${body.complete ? "" : '<div class="incomplete-warn">&#9888; one or more inputs missing on this date &mdash; treat with extra caution</div>'}
+      </div>
+      <div class="conf-wrap">
+        <div class="conf-label">Confidence</div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div>
+        <div class="conf-val">${confPct}%</div>
+      </div>
+    </div>
+
+    <div class="axis-grid">
+      <div class="axis-card"><div class="t">Trend</div><div class="v">${body.trend}</div></div>
+      <div class="axis-card"><div class="t">Volatility</div><div class="v">${body.volatility}</div></div>
+      <div class="axis-card"><div class="t">Positioning</div><div class="v">${body.positioning.replace("_"," ")}</div></div>
+      <div class="axis-card"><div class="t">Alt rotation</div><div class="v">${body.alt_rotation.replace("_"," ")}</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="t">Evidence</span><span class="n">${body.evidence.length} inputs</span></div>
+      <div class="panel-body"><table class="evidence-table">
+        <thead><tr><th style="text-align:left">feature</th><th>raw</th><th>z</th><th style="text-align:left">reads as</th></tr></thead>
+        <tbody>${body.evidence.map(e => `<tr>
+          <td class="feat">${e.feature}</td>
+          <td>${e.raw != null ? e.raw.toLocaleString(undefined,{maximumFractionDigits:4}) : "&mdash;"}</td>
+          <td class="${e.z != null && Math.abs(e.z) >= 1 ? "ok-tag" : "dim"}">${e.z != null ? (e.z>0?"+":"")+e.z.toFixed(2) : "&mdash;"}</td>
+          <td class="reads">${e.reads_as}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+}
+
 loadStatus();
 loadCoverage();
 loadHistory();
+loadRegime();
 </script>
 </body>
 </html>
