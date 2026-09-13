@@ -1,0 +1,64 @@
+# ============================================================================
+#  FROZEN STATE VECTOR -- Crypto Regime Engine
+#
+#  Committed before any regime label was computed. DO NOT tune these against
+#  outcomes -- feature selection is where overfitting enters an analogue/
+#  regime system, and it is invisible once it has. Changing this file
+#  requires bumping `version`; every stored result records the version it
+#  used, so a tuned result can never be mistaken for an honest one.
+# ============================================================================
+
+version: 1
+frozen_at: "2026-09-13"
+
+guards:
+  standardization: expanding      # data <= t only. Full-sample = look-ahead.
+  min_history_days: 180           # crypto regimes rotate faster than equities;
+                                   # 3 years was the traditional-market bar,
+                                   # ~6 months is enough signal here and lets
+                                   # the engine start scoring much sooner.
+  exclusion_window_days: 21       # narrower than a traditional-market ~63:
+                                   # crypto autocorrelation decays faster.
+  episode_separation_days: 21
+  min_episodes_for_ci: 8
+  min_trades_for_ranking: 20
+  bootstrap: stationary_block
+  bootstrap_iterations: 2000
+  distance: mahalanobis
+
+forward_horizons_days: [1, 3, 7, 21]   # crypto horizons: next-day, 3d, 1wk, 3wk
+
+# calendar_symbol: whose daily bars define the trading calendar every other
+# series is as-of joined onto. BTC trades every day of the year, so this is
+# also every calendar day -- no market-holiday gaps to reconcile.
+calendar_symbol: BTCUSD
+
+features:
+  # ---------- Trend / momentum (BTC leads; alts are read relative to it) ----------
+  - { name: btc_trend_200d,   source: BTCUSD, series_kind: bars, transform: pct_from_sma, window: 200 }
+  - { name: btc_mom_63d,      source: BTCUSD, series_kind: bars, transform: log_return,    window: 63 }
+  - { name: btc_mom_21d,      source: BTCUSD, series_kind: bars, transform: log_return,    window: 21 }
+
+  # ---------- Volatility ----------
+  - { name: btc_realvol_21d,  source: BTCUSD, series_kind: bars, transform: realized_vol,  window: 21 }
+  - { name: btc_vol_ratio,    source: BTCUSD, series_kind: bars, transform: vol_ratio,      window: 21, slow_window: 90 }
+
+  # ---------- Altcoin rotation / breadth ("alt season" vs "BTC dominance") ----------
+  - { name: eth_vs_btc_63d,   source: ETHUSD, series_kind: bars, transform: rel_strength, vs: BTCUSD, window: 63 }
+  - { name: sol_vs_btc_63d,   source: SOLUSD, series_kind: bars, transform: rel_strength, vs: BTCUSD, window: 63 }
+  - { name: bnb_vs_btc_63d,   source: BNBUSD, series_kind: bars, transform: rel_strength, vs: BTCUSD, window: 63 }
+  - { name: xrp_vs_btc_63d,   source: XRPUSD, series_kind: bars, transform: rel_strength, vs: BTCUSD, window: 63 }
+
+  # ---------- Positioning (perpetual funding rate -- crypto-native, nothing
+  # else in this product has an equivalent). Trailing average, not the raw
+  # 8h print, because a single settlement is noisy; sustained funding is the
+  # actual crowding signal. ----------
+  - { name: btc_funding_avg_7d, source: BTCUSD, series_kind: funding, transform: sma,   window: 21 }  # ~7d at 3 prints/day
+  - { name: btc_funding_z,      source: BTCUSD, series_kind: funding, transform: expanding_z }
+  - { name: eth_funding_avg_7d, source: ETHUSD, series_kind: funding, transform: sma,   window: 21 }
+
+  # ---------- Macro context (Yahoo, keyless) ----------
+  - { name: dxy_mom_63d,      source: DXY,    series_kind: bars, transform: log_return,    window: 63 }
+  - { name: vix_level,        source: VIX,    series_kind: bars, transform: level }
+  - { name: vix_chg_21d,      source: VIX,    series_kind: bars, transform: pct_from_sma,  window: 21 }
+  - { name: us10y_chg_63d,    source: US10Y,  series_kind: bars, transform: diff,          window: 63 }
