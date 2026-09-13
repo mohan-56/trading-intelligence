@@ -13,10 +13,11 @@ from fastapi.responses import FileResponse, JSONResponse
 
 import app as _app_pkg  # noqa: F401
 from app.api.v1.routes import router as v1_router
-from app.core.config import get_settings
+from app.core.config import features_config, get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging, get_logger
 from app.domain.marketdata.service import MarketDataService
+from app.domain.quant.features import load_matrix
 from app.domain.symbols.registry import get_registry
 from app.providers.http import close_client
 from app.providers.registry import build_chains, build_providers
@@ -48,8 +49,14 @@ async def lifespan(application: FastAPI):
         "open_interest": MarketDataService(registry, chains["open_interest"], lakes["open_interest"]),
     }
 
+    # Read the precomputed state vector (~ms). Building it takes real time and
+    # must never happen on a request. None is a valid state -- the API says
+    # so and points at the script, rather than silently serving nothing.
+    application.state.features = load_matrix(lakes["bars"].root, int(features_config().get("version", 0)))
+
     get_connection()
     log.info("startup_complete", symbols=len(registry), providers=sorted(providers),
+             state_vector=("loaded" if application.state.features is not None else "NOT BUILT"),
              data_root=str(settings.data_root))
     try:
         yield
