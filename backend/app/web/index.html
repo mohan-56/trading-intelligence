@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crypto Intelligence</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#10161f; --panel2:#161d2b; --line:#232b3a;
+    --fg:#ccd6e6; --dim:#7b879c; --accent:#59e3a0; --accent2:#57a9ff;
+    --pos:#59e3a0; --neg:#ff6b6b; --warn:#e7a53c;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;padding:12px 18px;
+         border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{font:600 14px var(--mono);margin:0;letter-spacing:.1em;text-transform:uppercase}
+  .sub{color:var(--dim);font:11px var(--mono)}
+  .spacer{flex:1}
+  .pill{padding:2px 8px;border:1px solid var(--line);border-radius:3px;font:11px var(--mono);color:var(--dim);background:var(--panel2)}
+  .pill.ok{color:var(--pos);border-color:#1f5e46}
+  .pill.bad{color:var(--neg);border-color:#5e2626}
+
+  main{padding:16px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));max-width:1500px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  section.wide{grid-column:1/-1}
+  h2{font:11px var(--mono);margin:0;padding:9px 14px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+     border-bottom:1px solid var(--line);background:var(--panel2);display:flex;justify-content:space-between;gap:10px}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);display:inline-block;margin-right:6px}
+  .live-dot.on{background:var(--pos);box-shadow:0 0 6px var(--pos)}
+
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{position:sticky;top:0;background:var(--panel2);color:var(--dim);font-weight:500;text-align:right;
+     padding:6px 12px;font:10px var(--mono);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  td{padding:6px 12px;text-align:right;border-bottom:1px solid rgba(35,43,58,.5);white-space:nowrap;
+     font-variant-numeric:tabular-nums}
+  tr:hover td{background:rgba(90,169,255,.06)}
+  .ticker{font-family:var(--mono);font-size:15px;font-weight:600}
+  .pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--dim)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(126px,1fr));gap:6px;padding:12px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:7px 9px}
+  .card .t{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .card .v{font-size:14px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .card .m{font:10px var(--mono);color:var(--dim);margin-top:1px}
+  .empty{padding:24px 16px;color:var(--dim);text-align:center;line-height:1.7}
+  code{background:var(--panel2);padding:2px 6px;border-radius:3px;color:var(--accent2)}
+  footer{padding:14px 18px;color:var(--dim);font-size:11px;border-top:1px solid var(--line)}
+  a{color:var(--accent2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Crypto Intelligence</h1>
+  <span class="sub" id="asof">connecting&hellip;</span>
+  <span class="spacer"></span>
+  <span class="pill" id="p-live"><span class="live-dot" id="live-dot"></span>live: connecting</span>
+  <span class="pill" id="p-symbols">&mdash;</span>
+  <span class="pill" id="p-lake">&mdash;</span>
+</header>
+
+<main>
+  <section class="wide">
+    <h2><span><span class="live-dot" id="live-dot2"></span>Live &mdash; streamed directly from Binance, no backend involved</span>
+        <span id="live-note" class="dim" style="font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
+    <div id="live"><div class="empty">opening WebSocket to Binance&hellip;</div></div>
+  </section>
+
+  <section class="wide">
+    <h2>Data coverage <span class="dim" id="cov-note" style="font-weight:400;text-transform:none;letter-spacing:0"></span></h2>
+    <div><div class="grid" id="cov"></div></div>
+  </section>
+</main>
+
+<footer>
+  Research and decision support. Nothing here is investment advice, and no number on this page is a prediction.
+  Live prices stream straight from Binance's public WebSocket &mdash; this page never asks its own backend for them.
+  <br>API: <a href="/docs">/docs</a>
+</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = (v, d=2) => v==null||!isFinite(v) ? "&mdash;" : v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtPx = v => v==null ? "&mdash;" : (v>=1000 ? v.toLocaleString(undefined,{maximumFractionDigits:2}) : v.toLocaleString(undefined,{maximumFractionDigits:v<1?6:4}));
+
+async function get(path){ const r = await fetch(path); return {ok:r.ok, body: await r.json().catch(()=>({}))}; }
+
+// ---------- live ticker: browser -> Binance, direct, no backend ----------
+const PAIRS = ["btcusdt","ethusdt","solusdt","bnbusdt","xrpusdt"];
+const live = {};
+PAIRS.forEach(p => live[p] = null);
+
+function renderLive(){
+  const rows = PAIRS.map(p => {
+    const t = live[p];
+    if (!t) return `<tr><td class="ticker">${p.replace("usdt","").toUpperCase()}</td><td colspan="4" class="dim">waiting for first tick&hellip;</td></tr>`;
+    const chg = parseFloat(t.P);
+    const cls = chg > 0 ? "pos" : chg < 0 ? "neg" : "dim";
+    const sign = chg > 0 ? "+" : "";
+    return `<tr>
+      <td class="ticker">${p.replace("usdt","").toUpperCase()}</td>
+      <td>$${fmtPx(parseFloat(t.c))}</td>
+      <td class="${cls}">${sign}${chg.toFixed(2)}%</td>
+      <td class="dim">$${fmtPx(parseFloat(t.h))}</td>
+      <td class="dim">$${fmtPx(parseFloat(t.l))}</td>
+      <td class="dim">${(parseFloat(t.q)/1e6).toFixed(1)}M</td>
+    </tr>`;
+  }).join("");
+  $("#live").innerHTML = `<table>
+    <thead><tr><th>pair</th><th>last</th><th>24h</th><th>24h high</th><th>24h low</th><th>24h quote vol</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+renderLive();
+
+function connectLive(){
+  const streams = PAIRS.map(p => `${p}@ticker`).join("/");
+  const ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
+
+  ws.onopen = () => {
+    $("#p-live").className = "pill ok";
+    $("#p-live").innerHTML = '<span class="live-dot on" id="live-dot"></span>live: connected';
+    $("#live-dot2").className = "live-dot on";
+    $("#live-note").textContent = "wss://stream.binance.com · 5 pairs, one connection";
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    const sym = (msg.data && msg.data.s || "").toLowerCase();
+    if (sym && sym in live){ live[sym] = msg.data; renderLive(); }
+    $("#asof").textContent = "last tick " + new Date().toLocaleTimeString();
+  };
+  ws.onclose = () => {
+    $("#p-live").className = "pill bad";
+    $("#p-live").innerHTML = '<span class="live-dot" id="live-dot"></span>live: disconnected, retrying&hellip;';
+    $("#live-dot2").className = "live-dot";
+    setTimeout(connectLive, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+connectLive();
+
+// ---------- coverage: precomputed, read from our own API ----------
+async function loadCoverage(){
+  const {ok, body} = await get("/api/v1/coverage");
+  if (!ok) return;
+  $("#cov").innerHTML = body.symbols.map(s => {
+    const has = s.rows > 0;
+    const lat = (s.provenance && s.provenance.latency) || "UNAVAILABLE";
+    const cls = !has ? "neg" : (lat === "LIVE" ? "pos" : "");
+    return `<div class="card">
+      <div class="t">${s.ticker}</div>
+      <div class="v ${cls}">${has ? s.rows.toLocaleString() : "no data"}</div>
+      <div class="m">${has ? (s.end||"").slice(0,10) + " · " + lat : lat}</div>
+    </div>`;
+  }).join("");
+  $("#cov-note").textContent = `${body.with_data}/${body.count} symbols`;
+  $("#p-symbols").textContent = `${body.with_data}/${body.count} symbols`;
+  $("#p-symbols").className = "pill " + (body.with_data === body.count ? "ok" : "");
+}
+
+async function loadStatus(){
+  const {ok, body} = await get("/api/v1/status");
+  if (!ok) return;
+  const bars = body.lakes && body.lakes.bars;
+  const mb = bars ? bars.bytes/1048576 : 0;
+  $("#p-lake").textContent = `lake: ${bars ? bars.files : 0} files · ${mb.toFixed(1)} MB`;
+}
+
+loadStatus();
+loadCoverage();
+</script>
+</body>
+</html>
