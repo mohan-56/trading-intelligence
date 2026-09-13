@@ -22,6 +22,63 @@ class TestSMA:
         assert np.isnan(ind.sma(np.array([1.0, 2.0]), 5)).all()
 
 
+class TestSMANaNSafety:
+    """Regression guard for a real bug: sma() used np.cumsum, which
+    propagates a single NaN forward through the entire remaining array. A
+    log-return series always has `window` leading NaNs by design, so any
+    caller feeding a returns series into sma() got all-NaN back past the
+    warm-up point -- found when two backtest strategies produced exactly
+    zero trades across 8 years of real BTC history."""
+
+    def test_leading_nan_does_not_poison_the_rest_of_the_series(self):
+        v = np.concatenate([np.full(10, np.nan), np.full(200, 100.0)])
+        out = ind.sma(v, 20)
+        # windows fully past the NaN region must recover
+        assert np.isfinite(out[50:]).all()
+        assert out[100] == pytest.approx(100.0)
+
+    def test_matches_hand_computed_once_past_the_gap(self):
+        v = np.concatenate([np.full(5, np.nan), np.arange(1.0, 21.0)])
+        out = ind.sma(v, 3)
+        # last three real values are 18, 19, 20 -> mean 19
+        assert out[-1] == pytest.approx(19.0)
+
+    def test_a_window_still_touching_the_gap_is_nan(self):
+        v = np.concatenate([np.full(5, np.nan), np.arange(1.0, 21.0)])
+        out = ind.sma(v, 10)
+        # index 5 (first real value) needs 10 prior points, 5 of which are NaN
+        assert np.isnan(out[10])
+
+    def test_no_nan_input_matches_simple_hand_computation(self):
+        """The fix must not change behaviour for the common (no-gap) case."""
+        v = np.array([1.0, 2, 3, 4, 5])
+        out = ind.sma(v, 3)
+        assert out[2] == pytest.approx(2.0)
+        assert out[4] == pytest.approx(4.0)
+
+
+class TestRollingZScore:
+    def test_flat_series_has_no_finite_zscore(self):
+        """sd == 0 must produce NaN, never a divide-by-zero inf."""
+        out = ind.rolling_zscore(np.full(50, 100.0), 10)
+        assert not np.isfinite(out[9:]).any()
+
+    def test_matches_expected_sign(self):
+        v = np.concatenate([np.full(90, 0.0), [-5.0]])
+        z = ind.rolling_zscore(v, 90)
+        assert z[-1] < 0
+
+    def test_causal(self):
+        rng = np.random.default_rng(15)
+        full = rng.normal(0, 1, 300)
+        cut = 200
+        a = ind.rolling_zscore(full, 30)[:cut]
+        b = ind.rolling_zscore(full[:cut].copy(), 30)
+        both = ~np.isnan(a) & ~np.isnan(b)
+        assert both.sum() > 50
+        np.testing.assert_allclose(a[both], b[both], rtol=1e-9, atol=1e-9)
+
+
 class TestVolatility:
     def test_rolling_std_hand_computed(self):
         v = np.array([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
