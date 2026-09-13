@@ -179,6 +179,15 @@
   .evidence-table td.reads{text-align:left;color:var(--ink-dim);white-space:normal;max-width:340px}
   .evidence-table td.feat{font-family:var(--font-display);color:var(--ink)}
 
+  /* ---------------- analogue view ---------------- */
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .stat-chip{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:11px 16px;flex:1;min-width:150px}
+  .stat-chip .t{font-family:var(--font-display);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .stat-chip .v{font-family:var(--font-display);font-weight:700;font-size:20px;color:var(--ink);margin-top:3px}
+  .horizon-table td.na{color:var(--ink-faint);font-style:italic}
+  .unreliable-note{font-size:10px;color:var(--warn);font-family:var(--font-display);display:block;margin-top:2px}
+  .fwd-pos{color:var(--pos)} .fwd-neg{color:var(--neg)}
+
   /* ---------------- coming-soon placeholders ---------------- */
   .soon{
     border:1px dashed var(--line-bright);border-radius:14px;padding:44px 28px;text-align:center;
@@ -282,14 +291,9 @@
         <div class="view-head">
           <div class="eyebrow">Block B<span class="rule"></span></div>
           <h2>Historical analogues</h2>
-          <p>Past periods that resembled today, with what happened next &mdash; a range, not a guess, and the sample size shown next to it.</p>
+          <p>Nearby days are excluded (autocorrelation), clustered matches count once (episode collapsing), and below 8 episodes the confidence interval is suppressed rather than shown thin.</p>
         </div>
-        <div class="soon">
-          <div class="icon"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.2"/><circle cx="17" cy="7" r="3.2"/><circle cx="12" cy="17" r="3.2"/><path d="M9.3 8.8L14.7 15.2M9.3 15.2L14.7 8.8"/></svg></div>
-          <h3>Not built yet</h3>
-          <p>Needs the regime engine's state vector first, then episode-guarded nearest-neighbour search over 15 years of history.</p>
-          <span class="badge">Block B &middot; up next</span>
-        </div>
+        <div id="analogue-body"><div class="empty-note">loading&hellip;</div></div>
       </section>
 
       <!-- ================= STRATEGIES ================= -->
@@ -542,10 +546,67 @@ async function loadRegime(){
     </div>`;
 }
 
+// ---------------- analogues: computed on request, cheap ----------------
+async function loadAnalogues(){
+  const {ok, body} = await get("/api/v1/analogues/latest");
+  const el = $("#analogue-body");
+  if (!ok){
+    const fix = (body.error && body.error.detail && body.error.detail.fix) || "python scripts/build_features.py";
+    el.innerHTML = `<div class="soon">
+      <div class="icon"><svg viewBox="0 0 24 24"><circle cx="7" cy="7" r="3.2"/><circle cx="17" cy="7" r="3.2"/><circle cx="12" cy="17" r="3.2"/><path d="M9.3 8.8L14.7 15.2M9.3 15.2L14.7 8.8"/></svg></div>
+      <h3>Not available</h3>
+      <p>${(body.error && body.error.message) || "Unknown error"}. Try <code>${fix}</code>.</p>
+    </div>`;
+    return;
+  }
+
+  const pctClass = v => v == null ? "" : (v >= 0 ? "fwd-pos" : "fwd-neg");
+  const pct = v => v == null ? "&mdash;" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+
+  const horizonRows = body.horizons.map(h => `<tr>
+    <td class="feat">${h.horizon_days}d</td>
+    <td>${h.n_episodes}</td>
+    <td class="${pctClass(h.median)}">${pct(h.median)}</td>
+    <td class="dim">${pct(h.p25)} &ndash; ${pct(h.p75)}</td>
+    <td class="${h.reliable ? "" : "na"}">${h.reliable ? `${pct(h.ci_low)} to ${pct(h.ci_high)}` : "too few episodes<span class=\"unreliable-note\">n &lt; 8, CI suppressed</span>"}</td>
+  </tr>`).join("");
+
+  const episodeRows = body.episodes.slice(0, 12).map(e => `<tr>
+    <td class="feat">${e.anchor_date}</td>
+    <td class="dim">${e.distance.toFixed(2)}</td>
+    <td class="${pctClass(e.forward_returns["1d"])}">${pct(e.forward_returns["1d"])}</td>
+    <td class="${pctClass(e.forward_returns["21d"] !== undefined ? e.forward_returns["21d"] : null)}">${pct(e.forward_returns["21d"] !== undefined ? e.forward_returns["21d"] : null)}</td>
+  </tr>`).join("");
+
+  el.innerHTML = `
+    <div class="stat-row">
+      <div class="stat-chip"><div class="t">Query date</div><div class="v">${body.query_date}</div></div>
+      <div class="stat-chip"><div class="t">Candidates considered</div><div class="v">${body.n_candidates.toLocaleString()}</div></div>
+      <div class="stat-chip"><div class="t">Distinct episodes</div><div class="v">${body.n_episodes}</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:12px">
+      <div class="panel-h"><span class="t">What happened next</span><span class="n">by horizon</span></div>
+      <div class="panel-body"><table class="horizon-table">
+        <thead><tr><th style="text-align:left">horizon</th><th>n episodes</th><th>median</th><th>p25&ndash;p75</th><th>80% CI</th></tr></thead>
+        <tbody>${horizonRows}</tbody>
+      </table></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h"><span class="t">Nearest episodes</span><span class="n">closest ${Math.min(12, body.episodes.length)} of ${body.n_episodes}</span></div>
+      <div class="panel-body"><table class="horizon-table">
+        <thead><tr><th style="text-align:left">date</th><th>distance</th><th>+1d</th><th>+21d</th></tr></thead>
+        <tbody>${episodeRows || '<tr><td colspan="4" class="dim">no episodes found</td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
 loadStatus();
 loadCoverage();
 loadHistory();
 loadRegime();
+loadAnalogues();
 </script>
 </body>
 </html>
